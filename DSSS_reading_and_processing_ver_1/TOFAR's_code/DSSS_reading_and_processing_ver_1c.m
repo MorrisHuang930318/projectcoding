@@ -1,0 +1,237 @@
+% Clear workspace
+clear;
+
+%% ---[optinal function activation]---
+active_clear_processed_data_label = 'enable';
+active_data_filter_label = 'enable'; % 'enable' or 'disable' LPF
+active_data_resample_label = 'enable'; % 'enable' or 'disable' resample
+active_coarse_freq_compensate_label = 'disable'; % 'enable' or 'disable' coarse freq. compensation
+active_carrier_and_phase_recovery_label = 'enable'; %'enable' or 'disable' carrier synchronization for phase recovery
+active_Rx_RRC_matched_filter_label = 'enable'; %'enable' or 'disable' RRC matched filtering at receiver (RX)
+active_time_sync_label = 'disable'; %'enable' or 'disable' timing recovery for symbol synchronization
+active_demod_HD_label = 'enable'; %'enable' or 'disable' hard-decision demodulation
+active_correlation_computing_label = 'disable'; %'enable' or 'disable' correlation computation and plots
+active_undemod_data_scatterpolt_label = 'enable'; %'enable' or 'disable' plot the processed data
+
+%% ---[parameter setting]---
+% sample_freq = 25000000;  % Original sampling frequency
+sample_freq = 12500000;  % Original sampling frequency
+BW = 4080000;            % Signal bandwidth 
+symbol_rate = BW;        % Assume that symbol rate approximates to bandwidth 
+cut_off_freq = BW*0.8;          % Low-pass filter cutoff frequency 
+sps = 4;                   % Sample per symbol
+desired_sampling_rate = BW*sps; % Desired sampling rate (frequency) after resampling
+RRC_DecimationFactor = 2; % sps after RRC filtering = desired_sampling_rate/RRC_DecimationFactor
+ultimate_sps = compute_ultimate_sps(sps, active_time_sync_label, active_Rx_RRC_matched_filter_label, RRC_DecimationFactor);
+
+%% ---[reading files]---
+% filename = '140-S_cf2491.750_25M.8t'; PN_code =  PN_seq_generator(16); % ***for 140 series, use PN ?
+% filename = '140_12.5M_20250623171624.100736.8t'; PN_code =  PN_seq_generator(10); % ***for 140 series, use PN ?
+%filename = '160-S_cf2491.750_25M.8t'; PN_code =  PN_seq_generator(4); % for 160 series, use PN 4
+%filename = '144-S_cf2491.750_25M.8t'; PN_code =  PN_seq_generator(5); % for 144 series, use PN 5
+%filename = '58-S_cf2491.750_25M.8t'; PN_code =  PN_seq_generator(17); %for 58 series, use PN 17
+%filename = 'cf2491.750_25M.8t'; PN_code =  PN_seq_generator(8); % ***for 110 series, use PN 8
+%filename = 'cf1113.250_25M.8t'; PN_code =  PN_seq_generator(2); % for XXX series, use PN 2
+filename = '84_2024-10-25_02-53-29_cf2491.750.cplx.12500000.8t'; PN_code =  PN_seq_generator(1); % for 84 series, use PN 1
+read_ratio = 0.1; % load data length = original length * read_ratio 
+data_complex = load_data(filename, read_ratio); % load data and save as complex numbers
+%data_complex = data_complex*exp(1i*pi/8);
+%% ---[filtering loaded data]---
+% 'butter' for Butterworth LPF or 'fir' for FIR filter
+data_filtered = data_filtering(data_complex, active_data_filter_label, cut_off_freq, sample_freq, 'butter'); 
+
+%% ---[resample data]---
+% 'res' for regular method or 'dsp' for the method from DSP toolbox
+data_resampled = resample_data(data_filtered, active_data_resample_label, 'res', desired_sampling_rate, sample_freq, BW); 
+
+%% ---[coarse frequency compensation]---
+[data_coarse_synced, coarse_freq_est] = coarse_freq_compensate(data_resampled, active_coarse_freq_compensate_label, sps, desired_sampling_rate);
+fid = fopen('data_coarse_synced.txt', 'w');
+for k = 1:length(data_coarse_synced)
+    fprintf(fid, '%.6f %.6f\n', real(data_coarse_synced(k)), imag(data_coarse_synced(k)));
+end
+fclose(fid);
+
+%% ---[carrier synchronization / phase recovery]---
+[data_phase_recovered, phase_change] = carrier_sync_phase_recovery(data_coarse_synced, active_carrier_and_phase_recovery_label, sps);
+
+% release memory
+if strcmp(active_clear_processed_data_label, 'enable') clear data_complex; clear data_filtered; clear data_resampled; clear data_coarse_synced; end
+
+%% ---[root raised cosine matched filter]---
+data_RRC_matched = RRC_filter(data_phase_recovered, active_Rx_RRC_matched_filter_label, sps, RRC_DecimationFactor);
+
+%% ---[timing recovery / symbol synchronizer]---
+data_time_synced = time_symbol_sync(data_RRC_matched, active_time_sync_label, active_Rx_RRC_matched_filter_label, sps, RRC_DecimationFactor);
+
+%% 
+data_befor_Demod_Rx = data_time_synced;
+
+% release memory
+if strcmp(active_clear_processed_data_label, 'enable') clear data_phase_recovered; clear data_RRC_matched; clear data_time_synced; end
+
+%% ---[plot data defore demodulation]---
+if strcmp(active_undemod_data_scatterpolt_label, 'enable') scatterplot(data_befor_Demod_Rx); end
+
+%% ---[direct demodulation]---
+% Perform demodulation for OQPSK (might with freq./time/phase errors)
+if strcmp(active_demod_HD_label, 'enable')
+    I_bits = real(data_befor_Demod_Rx) > 0;  % In-phase channel decision
+    Q_bits = imag(data_befor_Demod_Rx) > 0;  % Quadrature channel decision
+    % Q_bits = [0; Q_channel(1:end-1)] > 0;  % Q-channel decision with
+    % half-symbol delay % If The Q-channel needs to be delayed by half a symbol (when timing recovery is disable) 
+end
+
+%% ---[correlation calculation]---
+if strcmp(active_correlation_computing_label, 'enable')
+    % Compute autocorrelation of the downsampled signal
+    [autocorr_complex_data, delay] = (xcorr(data_befor_Demod_Rx));
+    [autocorr_complex_data_I, delay_I] = (xcorr(1-2*I_bits));
+    [autocorr_complex_data_Q, delay_Q] = (xcorr(1-2*Q_bits));
+
+    % Plot autocorrelation result
+    % all
+    figure;
+    stem(delay, abs(autocorr_complex_data));
+    title('Estimated Periods of PN Codes');
+    xlabel('Delay');
+    ylabel('Estimated Correlation');
+    % In-phase
+    figure;
+    stem(delay_I, abs(1-2*autocorr_complex_data_I));
+    title('Estimated Periods of PN Codes (I channel)');
+    xlabel('Delay');
+    ylabel('Estimated Correlation');
+    % Quadrature
+    figure;
+    stem(delay_Q, abs(1-2*autocorr_complex_data_Q));
+    title('Estimated Periods of PN Codes (Q channel)');
+    xlabel('Delay');
+    ylabel('Estimated Correlation');
+end
+
+
+%DSSS_reading_and_processing_ver_1c
+
+%% Functions used
+function [filtered_data] = data_filtering(data, data_filter_activation, cut_off_freq, sample_freq, type)
+    if strcmp(data_filter_activation, 'enable')    
+        if strcmp(type, 'butter')
+            filter_order = 4;
+            [b, a] = butter(filter_order, cut_off_freq / (sample_freq / 2), 'low');  % [filter_order]-th Butterworth LPF
+        elseif strcmp(type, 'fir')
+            b = firls(128,[0 (cutf/(sample_freq/2)) (cutf/(sample_freq/2))+0.1 1],[1 1 0 0]);
+            a = 1;
+        end
+        filtered_data = filter(b, a, data);  % Apply the filter to the signal
+    elseif strcmp(data_filter_activation, 'disable')
+        filtered_data = data;
+    end
+end
+
+
+function [resampled_data] = resample_data(data, type, filter_type, desired_sampling_rate, sample_freq, BW)
+    if strcmp(type, 'enable')
+        if strcmp(filter_type, 'res')
+            [p, q] = rat(desired_sampling_rate / sample_freq);  
+            resampled_data = resample(data, p, q, 4);
+        elseif strcmp(filter_type, 'dsp')
+            RC1 = dsp.SampleRateConverter('Bandwidth', 2 * BW, ...
+                'InputSampleRate', sample_freq, 'OutputSampleRate', desired_sampling_rate, ...
+                'OutputRateTolerance', 0, 'StopbandAttenuation', 140);
+            resampled_data = RC1(data);
+        end
+    else strcmp(type, 'disable')
+        resampled_data = data;
+    end
+end
+
+function [coarse_sync_data, coarseEst] = coarse_freq_compensate(data, activation, sps, sample_rate)
+    if strcmp(activation, 'enable')
+        coarse = comm.CoarseFrequencyCompensator( ...
+            Modulation = "OQPSK", ...
+            SamplesPerSymbol = sps, ...
+            SampleRate = sample_rate, ...
+            FrequencyResolution = 10);
+        [coarse_sync_data, coarseEst] = coarse(data);
+    else
+        coarse_sync_data = data;
+        coarseEst = 'unavailable'; 
+    end
+end
+
+function [data_phase_recovered, phase_change] = carrier_sync_phase_recovery(data, type, sps)
+    if strcmp(type, 'enable')
+        carrierSync = comm.CarrierSynchronizer('Modulation', 'OQPSK', ...
+                                              'SamplesPerSymbol', sps, ...
+                                              'DampingFactor', 0.707, ...  % Critical damping
+                                              'NormalizedLoopBandwidth', 0.01);
+        [data_phase_recovered, phase_change] = carrierSync(data);
+    elseif strcmp(type, 'disable')
+        data_phase_recovered = data;
+        phase_change = 'unavailable';
+    end
+end
+
+function [data_RRC_matched] = RRC_filter(data, type, sps, RRC_DecimationFactor)
+    if strcmp(type, 'enable')
+        rolloff = 0.8;  % Rolloff factor for root-raised cosine filter
+        span = 6;        % Filter span (in symbols)
+        RRC_rxFilter = comm.RaisedCosineReceiveFilter('RolloffFactor', rolloff, ...
+                                           'FilterSpanInSymbols', span, ...
+                                           'InputSamplesPerSymbol', sps, ...  
+                                           'DecimationFactor', RRC_DecimationFactor);  
+        data_RRC_matched = RRC_rxFilter(data);
+    elseif strcmp(type, 'disable')
+        data_RRC_matched = data;
+    end
+end
+
+function [data_time_synced] = time_symbol_sync(data, type, if_RRC_enabled, sps, RRC_DecimationFactor)
+    if strcmp(type, 'enable')
+        if strcmp(if_RRC_enabled, 'enable')
+            symbol_sync = comm.SymbolSynchronizer('Modulation', 'OQPSK', ...
+                                         'TimingErrorDetector', 'Gardner (non-data-aided)', ...
+                                         'SamplesPerSymbol',sps/RRC_DecimationFactor, ...
+                                         'DampingFactor', 1.0, ...
+                                         'NormalizedLoopBandwidth', 0.005);
+            data_time_synced = symbol_sync(data);    
+        elseif strcmp(if_RRC_enabled, 'disable')
+            symbol_sync = comm.SymbolSynchronizer('Modulation', 'OQPSK', ...
+                                         'TimingErrorDetector', 'Gardner (non-data-aided)', ...
+                                         'SamplesPerSymbol',sps, ...
+                                         'DampingFactor', 1.0, ...
+                                         'NormalizedLoopBandwidth', 0.01);
+            data_time_synced = symbol_sync(data); 
+        end
+    elseif strcmp(type, 'disable')
+        data_time_synced = data;
+    end
+end
+
+function [ultimate_sps] = compute_ultimate_sps(sps, if_time_sync_enabled, if_RRC_enabled, RRC_DecimationFactor)
+    if strcmp(if_time_sync_enabled, 'enable')
+        ultimate_sps = 1;
+    elseif strcmp(if_time_sync_enabled, 'disable')
+        if strcmp(if_RRC_enabled, 'enable')
+            ultimate_sps = sps/RRC_DecimationFactor;
+        else
+            ultimate_sps = sps;
+        end
+    end 
+end
+
+function [complex_data] = load_data(filename, ratio)
+    fid = fopen(filename, 'rb');  
+    data = fread(fid, 'int8');
+    fclose(fid);
+    data_length = round(length(data)*ratio);
+    if mod(data_length,2)
+        data_length = data_length -1;
+    end
+    complex_data = complex(double(data(1:2:data_length)), double(data(2:2:data_length))); 
+    NMZ_factor = mean(abs(complex_data))/sqrt(2);
+    % NMZ_factor = 127;
+    %complex_data = complex_data/NMZ_factor;
+    complex_data = round(complex_data/NMZ_factor, 2);
+end
