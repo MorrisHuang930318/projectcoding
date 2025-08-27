@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846
-#define LOADED_DATA_SIZE 600000
+#define LOADED_DATA_SIZE 50000
 #define THRESHOLD 30
 
 int calculate_correlation(int *dataArray1, int *dataArray2, int size);
@@ -51,7 +51,7 @@ int main() {
     };
 
     //讀取資料
-    FILE *file = fopen("data_coarse_synced.txt", "r");
+    FILE *file = fopen("data_complex_output.txt", "r");
     if (file == NULL) {
         perror("無法開啟檔案");
         return 1;

@@ -35,22 +35,41 @@ ultimate_sps = compute_ultimate_sps(sps, active_time_sync_label, active_Rx_RRC_m
 filename = '84_2024-10-25_02-53-29_cf2491.750.cplx.12500000.8t'; PN_code =  PN_seq_generator(1); % for 84 series, use PN 1
 read_ratio = 0.1; % load data length = original length * read_ratio 
 data_complex = load_data(filename, read_ratio); % load data and save as complex numbers
+% 將 data_complex 輸出到 txt 檔
+output_filename = 'data_complex_output.txt';
+fid = fopen(output_filename, 'w');
+
+% 一行一筆資料：real imag
+for k = 1:length(data_complex)
+    fprintf(fid, '%.10f %.10f\n', real(data_complex(k)), imag(data_complex(k)));
+end
+
+fclose(fid);
+
+disp(['Data saved to ', output_filename]);
+
 %data_complex = data_complex*exp(1i*pi/8);
 %% ---[filtering loaded data]---
 % 'butter' for Butterworth LPF or 'fir' for FIR filter
 data_filtered = data_filtering(data_complex, active_data_filter_label, cut_off_freq, sample_freq, 'butter'); 
+output_filename = 'data_filtered_output.txt';
+fid = fopen(output_filename, 'w');
 
+% 一行一筆資料：real imag
+for k = 1:length(data_filtered)
+    fprintf(fid, '%.10f %.10f\n', real(data_filtered(k)), imag(data_filtered(k)));
+end
+
+fclose(fid);
+
+disp(['Data saved to ', output_filename]);
 %% ---[resample data]---
 % 'res' for regular method or 'dsp' for the method from DSP toolbox
 data_resampled = resample_data(data_filtered, active_data_resample_label, 'res', desired_sampling_rate, sample_freq, BW); 
 
 %% ---[coarse frequency compensation]---
 [data_coarse_synced, coarse_freq_est] = coarse_freq_compensate(data_resampled, active_coarse_freq_compensate_label, sps, desired_sampling_rate);
-fid = fopen('data_coarse_synced.txt', 'w');
-for k = 1:length(data_coarse_synced)
-    fprintf(fid, '%.6f %.6f\n', real(data_coarse_synced(k)), imag(data_coarse_synced(k)));
-end
-fclose(fid);
+
 
 %% ---[carrier synchronization / phase recovery]---
 [data_phase_recovered, phase_change] = carrier_sync_phase_recovery(data_coarse_synced, active_carrier_and_phase_recovery_label, sps);
