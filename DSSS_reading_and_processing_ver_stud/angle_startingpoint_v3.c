@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846
-#define LOADED_DATA_SIZE 100000
+#define LOADED_DATA_SIZE 600000
 #define THRESHOLD 30
 
 int calculate_correlation(int *dataArray1, int *dataArray2, int size);
@@ -399,6 +399,8 @@ int main() {
     
     int data_segments =(LOADED_DATA_SIZE - fine_best_start_point) / 255;
     int idx = fine_best_start_point;
+    printf("THRESHOLD: %d\n", THRESHOLD);
+    fprintf(fp_final_result, "THRESHOLD: %d\n", THRESHOLD);
     printf("資料段數: %d\n", data_segments); 
     fprintf(fp_final_result, "資料段數: %d\n", data_segments);
     rotate_data(i_data, q_data, I_rot, Q_rot, abs((int)fine_best_angle), LOADED_DATA_SIZE, final_best_direction);
@@ -406,18 +408,26 @@ int main() {
     
     for(int segment = 0; segment < data_segments; segment++) {
         final_correlation = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx);
-        if (final_correlation < THRESHOLD) {
+        
+        // 修正：檢查絕對值是否大於閾值，然後用正負號判斷1/0
+        if(abs(final_correlation) >= THRESHOLD){
+            final_data[segment] = (final_correlation > 0) ? 1 : 0;
+        }else{
             printf("相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment, idx, final_correlation);
             fprintf(fp_final_result, "相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment, idx, final_correlation);
             int corr_prev = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx - 1); //前移一位
             int corr_next = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx + 1); //後移一位
-            if (corr_prev >= THRESHOLD && corr_prev >corr_next){
+            
+            // 修正：檢查前一位和後一位的相關性
+            if (abs(corr_prev) >= THRESHOLD && abs(corr_prev) > abs(corr_next)){
                 idx = idx - 1; 
                 final_correlation = corr_prev;
-            }else if (corr_next >= THRESHOLD && corr_next >corr_prev){
+                final_data[segment] = (corr_prev > 0) ? 1 : 0;
+            }else if (abs(corr_next) >= THRESHOLD && abs(corr_next) > abs(corr_prev)){
                 idx = idx + 1; 
                 final_correlation = corr_next;
-            } else {
+                final_data[segment] = (corr_next > 0) ? 1 : 0;
+            }else {
                 int best_local_corr = final_correlation;
                 int best_local_idx  = idx;
                 double best_local_angle = fine_best_angle;
@@ -430,14 +440,14 @@ int main() {
                         rotate_data(i_data, q_data, I_rot, Q_rot,fine_best_angle + ddeg, LOADED_DATA_SIZE, final_best_direction);
                         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
                         int corr = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, cand_idx);
-                        if (corr > best_local_corr) {
+                        if (abs(corr) > abs(best_local_corr)) {
                             best_local_corr = corr;
                             best_local_idx = cand_idx;
                             best_local_angle = fine_best_angle + ddeg;
                         }
                     }
                 }
-                if (best_local_corr > final_correlation) {
+                if (abs(best_local_corr) > abs(final_correlation)) {
                     idx = best_local_idx;
                     final_correlation = best_local_corr;
                     fine_best_angle = best_local_angle; // 視需要更新
@@ -466,22 +476,27 @@ int main() {
                     int cn = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, idx+1);
 
                     final_correlation = c0; int best_idx = idx;
-                    if (cp > final_correlation){ final_correlation = cp; best_idx = idx-1; }
-                    if (cn > final_correlation){ final_correlation = cn; best_idx = idx+1; }
+                    if (abs(cp) > abs(final_correlation)){ final_correlation = cp; best_idx = idx-1; }
+                    if (abs(cn) > abs(final_correlation)){ final_correlation = cn; best_idx = idx+1; }
                     idx = best_idx;
 
-                    if (final_correlation < THRESHOLD) {
+                    if (abs(final_correlation) < THRESHOLD) {
                         printf("粗+細調後仍不足（corr=%d），保留 0 並前進。\n", final_correlation);
+                        final_data[segment] = 0; // 明確設定為0
                     } else {
                         printf("粗+細調成功：angle=%.1f°, dir=%s, idx=%d, corr=%d\n",fine_best_angle, (final_best_direction? "順" : "逆"), idx, final_correlation);
                     }
                 }
+                
+                // 最終根據相關性的正負號和閾值來決定資料值
+                if(abs(final_correlation) >= THRESHOLD){
+                    final_data[segment] = (final_correlation > 0) ? 1 : 0;
+                }else{
+                    final_data[segment] = 0; // 相關性不足時預設為0
+                }
             }
         }
-        // int seg_threshold = (int)(0.6 * fine_best_correlation);
-        // if (seg_threshold < 30) seg_threshold = 30; // 設下下限避免太低
-
-        final_data[segment] = (final_correlation >= THRESHOLD) ? 1 : 0; 
+        
         printf("段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment, idx, final_correlation, final_data[segment]);
         fprintf(fp_final_result, "段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment, idx, final_correlation, final_data[segment]);
         idx += 255; 
@@ -516,49 +531,25 @@ int main() {
 }
 
 int recover_data(int *I_QPSK_demod, const int *PRN, int data_size, int prn_length, int start_point) {
-    int *dot_product_data = (int *)malloc(prn_length * sizeof(int));
-    int *bipolar_I_data   = (int *)malloc(prn_length * sizeof(int));
-    int *bipolar_prn      = (int *)malloc(prn_length * sizeof(int));
     int correlation = 0;
-
-    if (!dot_product_data || !bipolar_I_data || !bipolar_prn) {
-        fprintf(stderr, "recover_data 記憶體配置失敗\n");
-        free(dot_product_data);
-        free(bipolar_I_data);
-        free(bipolar_prn);
-        return 0;
-    }
-    // 轉換 I_QPSK_demod，只取 prn_length 個，並檢查越界
     for (int i = 0; i < prn_length; i++) {
         int idx = start_point + i;
-        if (idx >= data_size) {
-            bipolar_I_data[i] = 0;// 如果超出範圍，直接填 0 或適合的預設值
-        } else {
-            bipolar_I_data[i] = (I_QPSK_demod[idx] == 0) ? 1 : -1;
-        }
+        int bi = (idx >= data_size) ? 0 : ((I_QPSK_demod[idx] == 0) ? 1 : -1);
+        int bp = (PRN[i] == 0) ? 1 : -1;
+        correlation += bi * bp;
     }
-    for (int i = 0; i < prn_length; i++) {
-        bipolar_prn[i] = (PRN[i] == 0) ? 1 : -1;
-    }
-    for (int i = 0; i < prn_length; i++) {
-        dot_product_data[i] = bipolar_I_data[i] * bipolar_prn[i];
-        correlation += dot_product_data[i];
-    }
-    //printf("相關性: %d\n", correlation);
-    free(dot_product_data);
-    free(bipolar_I_data);
-    free(bipolar_prn);
     return correlation;
 }
+
 // 旋轉資料函式
 void rotate_data(double *i_data, double *q_data, double *I_rot, double *Q_rot, double angle, int size, int clockwise) {
-    double theta = angle * PI / 180.0;
+    double theta = angle * PI / 180.0;   //轉徑度
     
     for(int i = 0; i < size; i++) {
-        if (clockwise == 0) { // 逆時針旋轉
+        if (clockwise == 0) {    // counterclockwise 逆時針旋轉
             I_rot[i] = i_data[i] * cos(theta) - q_data[i] * sin(theta);
             Q_rot[i] = q_data[i] * cos(theta) + i_data[i] * sin(theta);
-        } else { // 順時針旋轉
+        } else {                 // clockwise 順時針旋轉
             I_rot[i] = i_data[i] * cos(theta) + q_data[i] * sin(theta);
             Q_rot[i] = q_data[i] * cos(theta) - i_data[i] * sin(theta);
         }
@@ -570,16 +561,16 @@ void qpsk_demodulation(double *i_data, double *q_data, int *I_QPSK_demod, int *Q
     for(int i = 0; i < size; i++) {
         double I = i_data[i];
         double Q = q_data[i];
-        if (I >= 0 && Q > 0) {        // 第一象限或I軸上方
+        if (I >= 0 && Q >= 0) {       // 第一象限或I軸上方
             I_QPSK_demod[i] = 1;
             Q_QPSK_demod[i] = 1;
         } else if (I < 0 && Q >= 0) { // 第二象限或Q軸右側
             I_QPSK_demod[i] = 0;
             Q_QPSK_demod[i] = 1;
-        } else if (I <= 0 && Q < 0) { // 第三象限或I軸下方
+        } else if (I < 0 && Q < 0) {  // 第三象限或I軸下方
             I_QPSK_demod[i] = 0;
             Q_QPSK_demod[i] = 0;
-        } else if (I > 0 && Q <= 0) { // 第四象限或Q軸左側
+        } else {//if (I > 0 && Q <= 0) { // 第四象限或Q軸左側
             I_QPSK_demod[i] = 1;
             Q_QPSK_demod[i] = 0;
         }
@@ -608,8 +599,14 @@ int find_start_point(int *I_QPSK_demod, const int *PRN, int data_size, int prn_l
         bipolar_prn[i] = (PRN[i] == 0) ? 1 : -1;
     }
 
-    // 進行位移並計算相關性 - 修正：移除不必要的printf，簡化邏輯
-    for (int shift = 0; shift <= data_size - prn_length; shift++) {
+    // 修正：限制搜尋範圍在前500以內
+    int max_shift = 500;  // 限制搜尋範圍
+    if (max_shift > data_size - prn_length) {
+        max_shift = data_size - prn_length;  // 確保不超出資料範圍
+    }
+
+    // 進行位移並計算相關性 - 修正：只搜尋前500個位置
+    for (int shift = 0; shift <= max_shift; shift++) {
         int correlation = 0;
         for (int i = 0; i < prn_length; i++) {
             correlation += bipolar_I_data[shift + i] * bipolar_prn[i];
