@@ -14,14 +14,14 @@ int recover_data(int *I_QPSK_demod, int *PRN,int data_size, int prn_length,int s
 int main() {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    int PRN_1[255] = {
+    int PRN_1[PRN_LENGTH] = {
     1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,1,0,1,1,1,0,1,0,1,
     0,0,0,0,1,1,1,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,
     1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,
     1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,0,0,0,0
     };
 
-    int PRN_3[255] = {
+    int PRN_3[PRN_LENGTH] = {
     1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,
     1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,
     1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,1,0,0,0,0,1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,
@@ -118,8 +118,8 @@ int main() {
         
         // 與PRN_1做相關性分析
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation_1);
-        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation_3);
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1);
+        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3);
         
         // 記錄結果
         printf("逆時針旋轉 %.0f度: PRN_1(起始點:%d, 相關性:%d), PRN_3(起始點:%d, 相關性:%d)\n", 
@@ -157,11 +157,11 @@ int main() {
         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
         
         //
-        //pos_neg_transform(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255);
+        //pos_neg_transform(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH);
         // 與PRN做相關性分析
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation_1);
-        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation_3);
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1);
+        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3);
         
         // 記錄結果
         printf("順時針旋轉 %.0f度: PRN_1(起始點:%d, 相關性:%d), PRN_3(起始點:%d, 相關性:%d)\n", 
@@ -193,7 +193,7 @@ int main() {
     double final_best_angle = best_direction == 0 ? best_angle : -best_angle;
     rotate_data(i_data, q_data, I_rot, Q_rot, abs((int)final_best_angle), LOADED_DATA_SIZE, best_direction);
     qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
-    final_correlation = recover_data(I_QPSK_demod, PRN_1,LOADED_DATA_SIZE, 255 , best_start_point_1);
+    final_correlation = recover_data(I_QPSK_demod, PRN_1,LOADED_DATA_SIZE, PRN_LENGTH , best_start_point_1);
     printf("final_correlation:%d\n", final_correlation);
     if(final_correlation >= 50){
     final_data[0] = 1;

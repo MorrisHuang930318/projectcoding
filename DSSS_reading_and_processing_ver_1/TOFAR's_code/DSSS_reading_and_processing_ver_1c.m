@@ -36,8 +36,8 @@ filename = '84_2024-10-25_02-53-29_cf2491.750.cplx.12500000.8t'; PN_code =  PN_s
 read_ratio = 0.1; % load data length = original length * read_ratio 
 data_complex = load_data(filename, read_ratio); % load data and save as complex numbers
 % 將 data_complex 輸出到 txt 檔
-output_filename = 'data_complex_output.txt';
-fid = fopen(output_filename, 'w');
+output_filename_0 = 'data_complex_output.txt';
+fid = fopen(output_filename_0, 'w');
 
 % 一行一筆資料：real imag
 for k = 1:length(data_complex)
@@ -46,14 +46,14 @@ end
 
 fclose(fid);
 
-disp(['Data saved to ', output_filename]);
+disp(['Data saved to ', output_filename_0]);
 
 %data_complex = data_complex*exp(1i*pi/8);
 %% ---[filtering loaded data]---
 % 'butter' for Butterworth LPF or 'fir' for FIR filter
 data_filtered = data_filtering(data_complex, active_data_filter_label, cut_off_freq, sample_freq, 'butter'); 
-output_filename = 'data_filtered_output.txt';
-fid = fopen(output_filename, 'w');
+output_filename_2 = 'data_filtered_output.txt';
+fid = fopen(output_filename_2, 'w');
 
 % 一行一筆資料：real imag
 for k = 1:length(data_filtered)
@@ -62,14 +62,22 @@ end
 
 fclose(fid);
 
-disp(['Data saved to ', output_filename]);
+disp(['Data saved to ', output_filename_2]);
 %% ---[resample data]---
 % 'res' for regular method or 'dsp' for the method from DSP toolbox
 data_resampled = resample_data(data_filtered, active_data_resample_label, 'res', desired_sampling_rate, sample_freq, BW); 
 
 %% ---[coarse frequency compensation]---
 [data_coarse_synced, coarse_freq_est] = coarse_freq_compensate(data_resampled, active_coarse_freq_compensate_label, sps, desired_sampling_rate);
+output_filename_1 = 'data_coarse_synced.txt';
+fid = fopen(output_filename_1, 'w');
 
+% 一行一筆資料：real imag
+for k = 1:length(data_coarse_synced)
+    fprintf(fid, '%.10f %.10f\n', real(data_coarse_synced(k)), imag(data_coarse_synced(k)));
+end
+fclose(fid);
+disp(['Data saved to ', output_filename_1]);
 
 %% ---[carrier synchronization / phase recovery]---
 [data_phase_recovered, phase_change] = carrier_sync_phase_recovery(data_coarse_synced, active_carrier_and_phase_recovery_label, sps);

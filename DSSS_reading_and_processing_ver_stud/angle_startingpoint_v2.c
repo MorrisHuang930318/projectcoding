@@ -15,14 +15,14 @@ void rotate_data(double *i_data, double *q_data, double *I_rot, double *Q_rot, d
 int main() {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    int PRN_1[255] = {
+    int PRN_1[PRN_LENGTH] = {
     1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,1,0,1,1,1,0,1,0,1,
     0,0,0,0,1,1,1,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,
     1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,
     1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,0,0,0,0
     };
 
-    int PRN_3[255] = {
+    int PRN_3[PRN_LENGTH] = {
     1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,
     1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,
     1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,1,0,0,0,0,1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,
@@ -90,7 +90,7 @@ int main() {
 
     // === 新增：分配二維相關性表格記憶體 ===
     int num_angles = 37;  // 逆時針0-180 + 順時針10-180，共37個點
-    int num_shifts = LOADED_DATA_SIZE - 255 + 1;  // 可能的位移數量
+    int num_shifts = LOADED_DATA_SIZE - PRN_LENGTH + 1;  // 可能的位移數量
     
     // 分配二維相關性表格記憶體 - PRN_1
     int **correlation_table_prn1 = (int **)malloc(num_shifts * sizeof(int *));
@@ -137,12 +137,12 @@ int main() {
         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
         
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation_1); // 與PRN_1做相關性分析
-        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation_3); // 與PRN_3做相關性分析
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
+        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3); // 與PRN_3做相關性分析
         
         // === 新增：計算並填入二維表格 ===
-        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, correlation_table_prn1, angle_index);
-        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, correlation_table_prn3, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn1, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn3, angle_index);
         angle_index++;
         // === 新增結束 ===
         

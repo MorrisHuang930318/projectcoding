@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846
-#define LOADED_DATA_SIZE 50000
+#define LOADED_DATA_SIZE 1000
 #define THRESHOLD 30
 
 int calculate_correlation(int *dataArray1, int *dataArray2, int size);
@@ -36,14 +36,14 @@ TuneResult coarse_fine_tune(
 int main() {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    int PRN_1[255] = {
+    int PRN_1[PRN_LENGTH] = {
     1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,1,0,1,1,1,0,1,0,1,
     0,0,0,0,1,1,1,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0,1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,
     1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,
     1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,0,0,0,0
     };
 
-    int PRN_3[255] = {
+    int PRN_3[PRN_LENGTH] = {
     1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,
     1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,
     1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,1,0,0,0,0,1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,
@@ -51,7 +51,7 @@ int main() {
     };
 
     //讀取資料
-    FILE *file = fopen("data_complex_output.txt", "r");
+    FILE *file = fopen("data_coarse_synced.txt", "r");
     if (file == NULL) {
         perror("無法開啟檔案");
         return 1;
@@ -112,7 +112,7 @@ int main() {
 
     // === 新增：分配二維相關性表格記憶體 (包括逆時針和順時針) ===
     int num_angles = 37;  // 逆時針0-180度(19個) + 順時針10-180度(18個) = 37個角度
-    int num_shifts = LOADED_DATA_SIZE - 255 + 1;  // 可能的位移數量
+    int num_shifts = LOADED_DATA_SIZE - PRN_LENGTH + 1;  // 可能的位移數量
     
     // 分配二維相關性表格記憶體 - PRN_1
     int **correlation_table_prn1 = (int **)malloc(num_shifts * sizeof(int *));
@@ -158,12 +158,12 @@ int main() {
         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
         
         int correlation_1, correlation_3; 
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation_1); // 與PRN_1做相關性分析
-        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation_3); // 與PRN_3做相關性分析
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
+        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3); // 與PRN_3做相關性分析
         
         // === 新增：計算並填入二維表格 ===
-        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, correlation_table_prn1, angle_index);
-        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, correlation_table_prn3, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn1, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn3, angle_index);
         angle_index++;
         // === 新增結束 ===
         
@@ -195,12 +195,12 @@ int main() {
         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
         
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation_1); // 與PRN_1做相關性分析
-        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation_3); // 與PRN_3做相關性分析
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
+        int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3); // 與PRN_3做相關性分析
         
         // === 計算並填入二維表格 ===
-        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, correlation_table_prn1, angle_index);
-        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, correlation_table_prn3, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn1, angle_index);
+        calculate_all_correlations(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, correlation_table_prn3, angle_index);
         angle_index++;
         // === 結束 ===
         
@@ -320,11 +320,11 @@ int main() {
         
         int correlation, start_point;
         // if(final_best_direction == global_best_direction_flag_prn1) {
-        //     start_point = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, 255, &correlation);
+        //     start_point = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation);
         // } else {
-        //     start_point = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, 255, &correlation);
+        //     start_point = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation);
         // }
-        start_point = find_start_point(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, &correlation);
+        start_point = find_start_point(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH, &correlation);
         printf("細調角度 %.1f度(%s): 起始點:%d, 相關性:%d\n", angle, direction_str, start_point, correlation);
         if(correlation > fine_best_correlation) {
         fine_best_correlation = correlation;
@@ -391,13 +391,13 @@ int main() {
         printf("PRN_3 相關性表格已輸出到 PRN3_correlation_table.txt\n");
     }
     
-    //255-sliding window  // 還原資料  
+    //PRN_LENGTH-sliding window  // 還原資料  
     FILE *fp_final_result = fopen("final_result.txt", "w");
     printf("\n========== 還原資料 ==========\n");
     int final_correlation = 0;
     printf("呼叫 recover_data，參數: start_point=%d\n", fine_best_start_point);
     
-    int data_segments =(LOADED_DATA_SIZE - fine_best_start_point) / 255;
+    int data_segments =(LOADED_DATA_SIZE - fine_best_start_point) / PRN_LENGTH;
     int idx = fine_best_start_point;
     printf("THRESHOLD: %d\n", THRESHOLD);
     fprintf(fp_final_result, "THRESHOLD: %d\n", THRESHOLD);
@@ -407,7 +407,7 @@ int main() {
     qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
     
     for(int segment = 0; segment < data_segments; segment++) {
-        final_correlation = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx);
+        final_correlation = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH , idx);
         
         // 修正：檢查絕對值是否大於閾值，然後用正負號判斷1/0
         if(abs(final_correlation) >= THRESHOLD){
@@ -415,8 +415,8 @@ int main() {
         }else{
             printf("相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment, idx, final_correlation);
             fprintf(fp_final_result, "相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment, idx, final_correlation);
-            int corr_prev = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx - 1); //前移一位
-            int corr_next = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255 , idx + 1); //後移一位
+            int corr_prev = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH , idx - 1); //前移一位
+            int corr_next = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH , idx + 1); //後移一位
             
             // 修正：檢查前一位和後一位的相關性
             if (abs(corr_prev) >= THRESHOLD && abs(corr_prev) > abs(corr_next)){
@@ -439,7 +439,7 @@ int main() {
                     for (double ddeg = -2.0; ddeg <= 2.0; ddeg += 0.5) {
                         rotate_data(i_data, q_data, I_rot, Q_rot,fine_best_angle + ddeg, LOADED_DATA_SIZE, final_best_direction);
                         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
-                        int corr = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, cand_idx);
+                        int corr = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH, cand_idx);
                         if (abs(corr) > abs(best_local_corr)) {
                             best_local_corr = corr;
                             best_local_idx = cand_idx;
@@ -455,7 +455,7 @@ int main() {
                     fprintf(fp_final_result, "局部微調成功：idx=%d, angle=%.1f, corr=%d\n", idx, best_local_angle, final_correlation);
                 } else {
                     // 粗＋細調一次，嘗試重新定錨角度/方向/PRN/起始點
-                    TuneResult tr = coarse_fine_tune(i_data, q_data, I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod,PRN_1, PRN_3, LOADED_DATA_SIZE, 255,
+                    TuneResult tr = coarse_fine_tune(i_data, q_data, I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod,PRN_1, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH,
                         10.0,   // coarse_step_deg
                         10.0,   // fine_span_deg
                         1.0     // fine_step_deg
@@ -471,9 +471,9 @@ int main() {
                     rotate_data(i_data, q_data, I_rot, Q_rot, fine_best_angle, LOADED_DATA_SIZE, final_best_direction);
                     qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
 
-                    int c0 = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, idx);
-                    int cp = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, idx-1);
-                    int cn = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, 255, idx+1);
+                    int c0 = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH, idx);
+                    int cp = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH, idx-1);
+                    int cn = recover_data(I_QPSK_demod, selected_prn, LOADED_DATA_SIZE, PRN_LENGTH, idx+1);
 
                     final_correlation = c0; int best_idx = idx;
                     if (abs(cp) > abs(final_correlation)){ final_correlation = cp; best_idx = idx-1; }
@@ -499,7 +499,7 @@ int main() {
         
         printf("段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment, idx, final_correlation, final_data[segment]);
         fprintf(fp_final_result, "段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment, idx, final_correlation, final_data[segment]);
-        idx += 255; 
+        idx += PRN_LENGTH; 
     }
     printf("還原結果:\n");
     fprintf(fp_final_result, "還原結果:\n");

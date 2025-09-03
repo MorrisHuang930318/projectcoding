@@ -6,7 +6,7 @@
 #define PI 3.14159265358979323846
 #define LOADED_DATA_SIZE 1000
 #define THRESHOLD 30
-#define PRN_LENGTH 255
+#define PRN_LENGTH PRN_LENGTH
 #define SEGMENT_SIZE (PRN_LENGTH + 2 * SEARCH_MARGIN)
 #define SEARCH_MARGIN 10
 
@@ -85,7 +85,7 @@ int main() {
         fprintf(stderr, "記憶體配置失敗\n");
         return 1;
     }
-    //enum { PRN_LENGTH = 255, SEARCH_MARGIN = 10 };
+    //enum { PRN_LENGTH = PRN_LENGTH, SEARCH_MARGIN = 10 };
    // enum { INITIAL_LEN = 2*PRN_LENGTH, WINDOW_LEN = PRN_LENGTH + 2*SEARCH_MARGIN };
     enum { STEP = WINDOW_LEN - SEARCH_MARGIN }; // 275 - 10 = 265
 
@@ -98,7 +98,7 @@ int main() {
     int overlap_data_count = 0; 
     int absolute_position = 0;
     int segment_count = 0;
-    //int max_segments = LOADED_DATA_SIZE / 255;
+    //int max_segments = LOADED_DATA_SIZE / PRN_LENGTH;
     while(segment_count < max_segments){
         int current_len = (segment_count == 0) ? INITIAL_LEN : WINDOW_LEN;
         int data_read = 0;
@@ -129,6 +129,16 @@ int main() {
             global_best_angle = tr.angle_deg;
             global_best_direction = tr.direction;
             absolute_position = tr.start_point;
+
+            overlap_data_count = SEARCH_MARGIN;      
+            // 第 0 段結尾（coarse+fine 之後）
+            int tail = (data_read >= SEARCH_MARGIN) ? SEARCH_MARGIN : data_read;
+            overlap_data_count = tail;
+            for (int i = 0; i < tail; ++i) {
+                int src = data_read - tail + i;   // 用「實際讀到的尾巴」
+                prev_overlap_i[i] = i_data[src];
+                prev_overlap_q[i] = q_data[src];
+            }
             segment_count++;
             continue;
         } else {
@@ -138,8 +148,8 @@ int main() {
                 q_data[i] = prev_overlap_q[i];
                 data_read++;
             }
-            read_start_idx = data_read;
-            for (int i = read_start_idx; i < current_len; i++) {
+            //read_start_idx = data_read;
+            for (int i = data_read; i < current_len; i++) {
                 if (fscanf(file, "%lf %lf", &i_data[i], &q_data[i]) == 2) {
                     data_read++;
                 } else {
@@ -151,59 +161,61 @@ int main() {
                 printf("本段資料不足，停止處理\n");
                 break;
             }
-        rotate_data(i_data, q_data, I_rot, Q_rot, abs(global_best_angle), current_len, global_best_direction);
+        rotate_data(i_data, q_data, I_rot, Q_rot, global_best_angle, current_len, global_best_direction);
         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, current_len);
         int final_correlation = 0;
-        final_correlation = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH, tr.start_point);
+        int start_idx = SEARCH_MARGIN;
+        final_correlation = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH, start_idx);
         if(abs(final_correlation) >= THRESHOLD){
             final_data[segment_count] = (final_correlation > 0) ? 1 : 0;
         }else{
-            printf("相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment_count, tr.start_point, final_correlation);
-            int corr_prev = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH , tr.start_point - 1); //前移一位
-            int corr_next = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH , tr.start_point + 1); //後移一位
+            printf("相關性不足，嘗試微調 (Segment: %d, 起始點 %d, 相關性 %d)\n", segment_count, absolute_position + SEARCH_MARGIN, final_correlation);
+            int corr_prev = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH , start_idx - 1); //前移一位
+            int corr_next = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH , start_idx + 1); //後移一位
             
             if (abs(corr_prev) >= THRESHOLD && abs(corr_prev) > abs(corr_next)){
-                tr.start_point = tr.start_point - 1; 
+                start_idx = start_idx - 1; 
                 final_correlation = corr_prev;
                 final_data[segment_count] = (corr_prev > 0) ? 1 : 0;
             }else if (abs(corr_next) >= THRESHOLD && abs(corr_next) > abs(corr_prev)){
-                tr.start_point = tr.start_point + 1; 
+                start_idx = start_idx + 1; 
                 final_correlation = corr_next;
                 final_data[segment_count] = (corr_next > 0) ? 1 : 0;
             }else {
                 int best_local_corr = final_correlation;
-                int best_local_idx  = tr.start_point;
-                double best_local_angle = tr.angle_deg;
+                int best_local_idx  = start_idx;//❎
+                double best_local_angle = absolute_position;
 
                 for (int dshift = -8; dshift <= 8; dshift++) {
-                    int cand_idx = tr.start_point + dshift;
+                    int cand_idx = start_idx + dshift;
                     if (cand_idx < 0) continue;
 
                     for (double ddeg = -2.0; ddeg <= 2.0; ddeg += 0.5) {
-                        rotate_data(i_data, q_data, I_rot, Q_rot, tr.angle_deg + ddeg, current_len, tr.direction);
+                        rotate_data(i_data, q_data, I_rot, Q_rot, global_best_angle + ddeg, current_len, global_best_direction);
                         qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, current_len);
                         int corr = recover_data(I_QPSK_demod, PRN_1, current_len, PRN_LENGTH, cand_idx);
                         if (abs(corr) > abs(best_local_corr)) {
                             best_local_corr = corr;
                             best_local_idx = cand_idx;
-                            best_local_angle = tr.angle_deg + ddeg;
+                            best_local_angle = global_best_angle + ddeg;
                         }
                     }
                 }
                 if (abs(best_local_corr) > abs(final_correlation)) {
-                    idx = best_local_idx;
+                    start_idx = best_local_idx;
                     final_correlation = best_local_corr;
-                    tr.angle_deg = best_local_angle; // 視需要更新
+                    global_best_angle = best_local_angle; // 視需要更新
                     //printf("局部微調成功：idx=%d, angle=%.1f, corr=%d\n", idx, best_local_angle, final_correlation);
 
                     if (abs(final_correlation) < THRESHOLD && final_correlation > 0) {
-                        printf("局部微調成功：idx=%d, angle=%.1f, corr=%d\n", tr.start_point, best_local_angle, final_correlation);
+                        printf("局部微調成功：idx=%d, angle=%.1f, corr=%d\n", start_idx, best_local_angle, final_correlation);
                         final_data[segment_count] = 1; // 明確設定為0
                     } else if (abs(final_correlation) <  THRESHOLD && final_correlation < 0){
-                        printf("局部微調成功：idx=%d, angle=%.1f, corr=%d\n", tr.start_point, best_local_angle, final_correlation);
+                        printf("局部微調成功：idx=%d, angle=%.1f, corr=%d\n", start_idx, best_local_angle, final_correlation);
                         final_data[segment_count] = 0;
                     }
                 } else {// 粗＋細調一次，嘗試重新定錨角度/方向/PRN/起始點
+                    printf("局部微調失敗，嘗試重新粗+細調...\n");
                     TuneResult tr = coarse_fine_tuning_stage(i_data, q_data, I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, PRN_1, current_len, PRN_LENGTH);
 
                     // 更新「全域」選擇（之後段落用得到）
@@ -232,22 +244,39 @@ int main() {
                         final_data[segment_count] = 0;
                     }
                 }
-                // if(abs(final_correlation) >= THRESHOLD){
-                //     final_data[segment] = (final_correlation > 0) ? 1 : 0;
-                // }else{
-                //     final_data[segment] = 0; 
-                // }
             }
         }
         
-        printf("段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment_count, tr.start_point, final_correlation, final_data[segment_count]);
+        printf("段 %d: 起始點 = %d, 相關性 = %d, 還原結果 = %d\n", segment_count, start_idx, final_correlation, final_data[segment_count]);
+
+        // 修正後的overlap邏輯
+        int prn_end_pos = start_idx + PRN_LENGTH;  // PRN結束後的第一個位置
+        int available_overlap = current_len - prn_end_pos;  // 可用的overlap數量
+
+        // 決定實際要保存的overlap數量
+        int actual_overlap_count = (available_overlap >= SEARCH_MARGIN) ? 
+                                SEARCH_MARGIN : available_overlap;
+
+        // 邊界檢查：確保不會出現負數或越界
+        if (actual_overlap_count <= 0) {
+            printf("警告：沒有足夠的資料作為overlap，設為0\n");
+            actual_overlap_count = 0;
         }
 
-        overlap_data_count = SEARCH_MARGIN;
-        for (int i = 0; i < overlap_data_count; ++i) {
-            int src = current_len - overlap_data_count + i;
-            prev_overlap_i[i] = i_data[src];
-            prev_overlap_q[i] = q_data[src];
+        // 保存overlap資料
+        printf("保存overlap: PRN結束於位置%d, 可用%d筆, 實際保存%d筆\n", 
+            prn_end_pos, available_overlap, actual_overlap_count);
+
+        for (int i = 0; i < actual_overlap_count; ++i) {
+            int src = prn_end_pos + i;
+            if (src < current_len) {  // 額外的邊界檢查
+                prev_overlap_i[i] = i_data[src];
+                prev_overlap_q[i] = q_data[src];
+            }
+        }
+
+        // 更新overlap_data_count為實際保存的數量
+        overlap_data_count = actual_overlap_count;
         }
         segment_count++;
     }
@@ -268,7 +297,6 @@ int main() {
     system("pause");
     return 0;
 }
-
 
 TuneResult coarse_fine_tuning_stage(double *i_data, double *q_data, double *I_rot, double *Q_rot, int *I_QPSK_demod, int *Q_QPSK_demod, const int *PRN_1, int data_size, int prn_len) {
     

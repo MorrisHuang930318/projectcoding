@@ -3,7 +3,7 @@
 function PN_code = PN_seq_generator(state_number)
     N = 12;
     % Number of bits to generate
-    PN_seq_length = 255;
+    PN_seq_length = PRN_LENGTH;
     if (state_number<17)
         %Initial state (non-zero) last 12 bits left-2-right
         state = [
