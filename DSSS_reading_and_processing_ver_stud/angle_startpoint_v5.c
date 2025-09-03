@@ -6,7 +6,7 @@
 #define PI 3.14159265358979323846
 #define LOADED_DATA_SIZE 1000
 #define THRESHOLD 30
-#define PRN_LENGTH PRN_LENGTH
+#define PRN_LENGTH 255
 #define SEGMENT_SIZE (PRN_LENGTH + 2 * SEARCH_MARGIN)
 #define SEARCH_MARGIN 10
 
@@ -45,7 +45,7 @@ int main() {
     1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,1,0,0,0,0,1,0,1,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,
     1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,1,0,1,1,1,0,1,0,1,0,0,0,0,1,1,1,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0
     };
-    FILE *file = fopen("data_coarse_synced.txt", "r");
+    FILE *file = fopen("data_RRC_matched.txt", "r");
     if (file == NULL) {
         perror("無法開啟檔案");
         return 1;
