@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846
-#define LOADED_DATA_SIZE 100000
+#define LOADED_DATA_SIZE 3000000
 #define THRESHOLD 30
 #define PRN_LENGTH 255
 int calculate_correlation(int *dataArray1, int *dataArray2, int size);
@@ -44,6 +44,7 @@ int main() {
     };
 //讀取資料
     FILE *file = fopen("data_RRC_matched.txt", "r");
+    FILE *fp_final_result = fopen("final_result.txt", "w");
     if (file == NULL) {
         perror("無法開啟檔案");
         return 1;
@@ -93,7 +94,9 @@ int main() {
             break;
           }
     }
+    int valid_len = i;  // 這才是實際有效長度
     printf("共成功讀入%d 筆資料\n", i);
+    printf("共成功讀入%d 筆資料\n", valid_len);
     printf("第一筆: I = %.6f, Q = %.6f\n", i_data[0], q_data[0]);
     printf("最後一筆: I = %.6f, Q = %.6f\n", i_data[i - 2], q_data[i - 2]);
 
@@ -102,29 +105,30 @@ int main() {
     fclose(file);
     printf("檔案關閉成功\n");
     printf("\n開始旋轉與相關性分析...\n");
-    TuneResult tr = coarse_fine_tuning_stage(i_data, q_data, I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod,PRN_1, LOADED_DATA_SIZE ,PRN_LENGTH);
+    TuneResult tr = coarse_fine_tuning_stage(i_data, q_data, I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod,PRN_1, valid_len ,PRN_LENGTH);
     printf("angle:%f , direction:%s , 起始點:%d , 相關性:%d " , tr.angle_deg , (tr.direction == 0 ? "逆時針":"順時針") , tr.start_point , tr.correlation);
     printf("\n========== 還原資料 ==========\n");
     int final_correlation = 0;
     printf("呼叫 recover_data，參數: start_point=%d\n", tr.start_point);
 
-    int data_segments =(LOADED_DATA_SIZE - tr.start_point) / PRN_LENGTH;
+    int data_segments =(valid_len - tr.start_point) / PRN_LENGTH;
     printf("THRESHOLD: %d\n", THRESHOLD);
     printf("資料段數: %d\n", data_segments);
-    rotate_data(i_data, q_data, I_rot, Q_rot, abs(tr.angle_deg), LOADED_DATA_SIZE, tr.direction);
-    qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);
-
-    for(int i = 0; i < data_segments; i++){
-        int idx = tr.start_point;
-        final_correlation = recover_data(I_QPSK_demod, PRN_1, 255, PRN_LENGTH , idx);
+    rotate_data(i_data, q_data, I_rot, Q_rot, abs(tr.angle_deg), valid_len, tr.direction);
+    qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, valid_len);
+    int idx = tr.start_point;
+    for(int i = 0; i < data_segments && idx + PRN_LENGTH <= valid_len; i++){
+        
+        final_correlation = recover_data(I_QPSK_demod, PRN_1, valid_len, PRN_LENGTH , idx);
         if(abs(final_correlation) >= THRESHOLD){
             final_data[i] = (final_correlation > 0) ? 1 : 0;
         }
-
+        printf("%d , %d\n", idx, final_correlation);
+        fprintf(fp_final_result, "%d , %d\n", idx, final_correlation);
         idx += PRN_LENGTH;
     }
     for(int i = 0; i < data_segments; i++){
-        printf("%d ", final_data[i]);
+        printf("%d", final_data[i]);
     }
 
     free(i_data);
@@ -138,10 +142,11 @@ int main() {
     system("pause");
     return 0;
 }
-int recover_data(int *I_QPSK_demod, const int *PRN, int data_size, int prn_length, int start_point) {
+int recover_data(int *I_QPSK_demod, const int *PRN,int data_size, int prn_length, int start_point) {
     int correlation = 0;
     for (int i = 0; i < prn_length; i++) {
         int idx = start_point + i;
+        if (idx >= data_size) break;  // 防止越界
         int bi = (I_QPSK_demod[idx] == 0) ? 1 : -1;
         int bp = (PRN[i] == 0) ? 1 : -1;
         correlation += bi * bp;
@@ -159,10 +164,10 @@ TuneResult coarse_fine_tuning_stage(double *i_data, double *q_data, double *I_ro
     
     printf("\n========== 開始粗調 ==========\n");
     for(double angle = 10; angle <= 180; angle += 10) {
-        rotate_data(i_data, q_data, I_rot, Q_rot, angle, LOADED_DATA_SIZE, 0);// 旋轉資料
-        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
+        rotate_data(i_data, q_data, I_rot, Q_rot, angle, data_size, 0);// 旋轉資料
+        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, data_size);// QPSK解調 
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, data_size, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
         printf("逆時針旋轉 %.0f度: PRN_1(起始點:%d, 相關性:%d)\n", angle, start_point_1, correlation_1);
         //int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3); // 與PRN_3做相關性分析
         //printf("逆時針旋轉 %.0f度: PRN_3(起始點:%d, 相關性:%d)\n", angle, start_point_3, correlation_3);
@@ -182,10 +187,10 @@ TuneResult coarse_fine_tuning_stage(double *i_data, double *q_data, double *I_ro
     }
     printf("\n");
     for(double angle = 10; angle <= 180; angle += 10) {
-        rotate_data(i_data, q_data, I_rot, Q_rot, angle, LOADED_DATA_SIZE, 1);// 旋轉資料
-        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
+        rotate_data(i_data, q_data, I_rot, Q_rot, angle, data_size, 1);// 旋轉資料
+        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, data_size);// QPSK解調 
         int correlation_1, correlation_3;
-        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
+        int start_point_1 = find_start_point(I_QPSK_demod, PRN_1, data_size, PRN_LENGTH, &correlation_1); // 與PRN_1做相關性分析
         printf("順時針旋轉 %.0f度: PRN_1(起始點:%d, 相關性:%d)\n", angle, start_point_1, correlation_1);
         // int start_point_3 = find_start_point(I_QPSK_demod, PRN_3, LOADED_DATA_SIZE, PRN_LENGTH, &correlation_3); // 與PRN_3做相關性分析
         // printf("逆時針旋轉 %.0f度: PRN_3(起始點:%d, 相關性:%d)\n", angle, start_point_3, correlation_3);
@@ -212,10 +217,10 @@ TuneResult coarse_fine_tuning_stage(double *i_data, double *q_data, double *I_ro
     printf("在 %.0f度(%s) 的 ±10度範圍內進行細調...\n", best_angle_1, (best_direction_1==0)?"逆時針":"順時針");
     for(double angle = fine_best_angle - 10; angle <= fine_best_angle + 10; angle += 1.0) {
         if(angle < 0 || angle > 180) continue;
-        rotate_data(i_data, q_data, I_rot, Q_rot, angle, LOADED_DATA_SIZE, fine_best_direction);// 旋轉資料
-        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, LOADED_DATA_SIZE);// QPSK解調 
+        rotate_data(i_data, q_data, I_rot, Q_rot, angle, data_size, fine_best_direction);// 旋轉資料
+        qpsk_demodulation(I_rot, Q_rot, I_QPSK_demod, Q_QPSK_demod, data_size);// QPSK解調 
         int correlation, start_point;
-        start_point = find_start_point(I_QPSK_demod, PRN_1, LOADED_DATA_SIZE, PRN_LENGTH, &correlation);
+        start_point = find_start_point(I_QPSK_demod, PRN_1, data_size, PRN_LENGTH, &correlation);
         printf("細調角度 %.1f度(%s): 起始點:%d, 相關性:%d\n", angle, (fine_best_direction == 0)?"逆時針":"順時針", start_point, correlation);
         if(correlation > fine_best_correlation) {
         fine_best_correlation = correlation;
