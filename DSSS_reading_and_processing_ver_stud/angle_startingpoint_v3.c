@@ -6,6 +6,7 @@
 #define PI 3.14159265358979323846
 #define LOADED_DATA_SIZE 1000
 #define THRESHOLD 30
+#define PRN_LENGTH 255
 
 int calculate_correlation(int *dataArray1, int *dataArray2, int size);
 int find_start_point(int *I_QPSK_demod, const int *PRN, int data_size, int prn_length, int *best_correlation_out);

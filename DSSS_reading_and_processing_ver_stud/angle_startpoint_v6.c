@@ -35,6 +35,11 @@ int main() {
     1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,1,0,0,0,
     1,1,0,1,1,1,0,0,0,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,0,0,0,1,0,0,0,0
     };
+    // int PRN_1[PRN_LENGTH * 2];
+    // for(int i = 0; i < PRN_LENGTH; i++){
+    //     PRN_1[i*2] = PRN_1[i];
+    //     PRN_1[i*2 + 1] = PRN_1[i];
+    // }
 
     int PRN_3[PRN_LENGTH] = {
     1,0,1,0,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,1,1,1,0,0,0,0,0,1,1,
@@ -43,7 +48,7 @@ int main() {
     1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,1,0,1,1,1,0,1,0,1,0,0,0,0,1,1,1,1,0,0,1,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,0
     };
 //讀取資料
-    FILE *file = fopen("data_RRC_matched.txt", "r");
+    FILE *file = fopen("data_RRC_matched_sample2_4.txt", "r");
     FILE *fp_final_result = fopen("final_result.txt", "w");
     if (file == NULL) {
         perror("無法開啟檔案");
@@ -123,14 +128,11 @@ int main() {
         if(abs(final_correlation) >= THRESHOLD){
             final_data[i] = (final_correlation > 0) ? 1 : 0;
         }
-        printf("%d , %d\n", idx, final_correlation);
-        fprintf(fp_final_result, "%d , %d\n", idx, final_correlation);
         idx += PRN_LENGTH;
     }
     for(int i = 0; i < data_segments; i++){
         printf("%d", final_data[i]);
     }
-
     free(i_data);
     free(q_data);
     free(I_rot);

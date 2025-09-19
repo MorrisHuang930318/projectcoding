@@ -32,7 +32,8 @@ ultimate_sps = compute_ultimate_sps(sps, active_time_sync_label, active_Rx_RRC_m
 %filename = '58-S_cf2491.750_25M.8t'; PN_code =  PN_seq_generator(17); %for 58 series, use PN 17
 %filename = 'cf2491.750_25M.8t'; PN_code =  PN_seq_generator(8); % ***for 110 series, use PN 8
 %filename = 'cf1113.250_25M.8t'; PN_code =  PN_seq_generator(2); % for XXX series, use PN 2
-filename = '84_2024-10-25_02-53-29_cf2491.750.cplx.12500000.8t'; PN_code =  PN_seq_generator(1); % for 84 series, use PN 1
+%filename = 'Sample_1_84_2024-10-25_02-53-29_cf2491.750.cplx.12500000.8t'; PN_code =  PN_seq_generator(1); % for 84 series, use PN 1
+filename = 'Sample_2_58_12.5M_20250623174159.928011.8t'; PN_code =  PN_seq_generator(17);
 read_ratio = 0.1; % load data length = original length * read_ratio 
 data_complex = load_data(filename, read_ratio); % load data and save as complex numbers
 %data_complex = data_complex*exp(1i*pi/8);
@@ -55,12 +56,11 @@ if strcmp(active_clear_processed_data_label, 'enable') clear data_complex; clear
 
 %% ---[root raised cosine matched filter]---
 data_RRC_matched = RRC_filter(data_phase_recovered, active_Rx_RRC_matched_filter_label, sps, RRC_DecimationFactor);
-output_filename_5 = 'data_RRC_matched(copied_once).txt';
+output_filename_5 = 'data_RRC_matched_sample2_4.txt';
 fid = fopen(output_filename_5, 'w');
 
 % 一行一筆資料：real imag
 for k = 1:length(data_RRC_matched)
-    fprintf(fid, '%.10f %.10f\n', real(data_RRC_matched(k)), imag(data_RRC_matched(k)));
     fprintf(fid, '%.10f %.10f\n', real(data_RRC_matched(k)), imag(data_RRC_matched(k)));
 end
 fclose(fid);
